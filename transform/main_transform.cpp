@@ -676,7 +676,7 @@ void create_dsm(string out_path) {
 
 class DSM_TRANSFORM {
 public:
-    DSM_TRANSFORM(std::string in_path,std::string out_path,Eigen::Matrix4d Transform,double offx,double offy) {
+    DSM_TRANSFORM(std::string in_path,std::string out_path,std::string ortho_path,std::string ortho_out_path,Eigen::Matrix4d Transform,double offx,double offy, double offz) {
         transform_ = Transform;
         in_zmin_ = -9999;
         in_zmax_ = -9999;
@@ -688,6 +688,7 @@ public:
         in_path_ = in_path;
         GDALAllRegister();
         pdriver_ = GetGDALDriverManager()->GetDriverByName("GTiff");
+        // dsm info
         in_dataset_ = (GDALDataset*)GDALOpen(in_path_.c_str(), GA_ReadOnly);
         in_dataset_->GetGeoTransform(transform);
         xSize = in_dataset_->GetRasterXSize();
@@ -701,10 +702,30 @@ public:
 
         GLOBAL_OFFSET_X_m_ = transform[0]+offx;
         GLOBAL_OFFSET_Y_m_ = transform[3]+offy;
+        GLOBAL_OFFSET_Z_m_ = offz;
 
         resolution_ = transform[1];
         in_datatype_=GDALGetRasterDataType(GDALGetRasterBand(in_dataset_, 1));
         in_band_ = in_dataset_->GetRasterBand(1);
+
+        // ortho info
+        if (fs::exists(ortho_path)) {
+            trans_ortho_ = true;
+            double ortho_transform[6];
+            int ortho_xSize, ortho_ySize;
+            ortho_in_dataset_ = (GDALDataset*)GDALOpen(ortho_path.c_str(), GA_ReadOnly);
+            ortho_in_dataset_->GetGeoTransform(ortho_transform);
+            ortho_xSize = ortho_in_dataset_->GetRasterXSize();
+            ortho_ySize = ortho_in_dataset_->GetRasterYSize();
+            if (in_width_ != ortho_xSize || in_height_ != ortho_ySize || ortho_transform[1]!=resolution_) {
+                trans_ortho_ = false;
+                std::cout << "[WARNING] orthophoto height,width or gsd is not same as the dsm file, thus we only transform dsm file\n" << std::endl;
+            }
+        }
+        else {
+            trans_ortho_ = false;
+        }
+
         //Collect zmin and zmax of in_raster
         int num_tile_x = ceil((double)in_width_ / (double)tile_size);
         int num_tile_y = ceil((double)in_height_ / (double)tile_size);
@@ -751,14 +772,14 @@ public:
         pt7<<in_utm_bbox_[1],in_utm_bbox_[2],in_zmax_;
         pt4<<in_utm_bbox_[0], in_utm_bbox_[2],in_zmin_;
         pt8<<in_utm_bbox_[0],in_utm_bbox_[2],in_zmax_;
-        point_trans(pt1, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, pt1_trans);
-        point_trans(pt2, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, pt2_trans);
-        point_trans(pt3, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, pt3_trans);
-        point_trans(pt4, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, pt4_trans);
-        point_trans(pt5, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, pt5_trans);
-        point_trans(pt6, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, pt6_trans);
-        point_trans(pt7, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, pt7_trans);
-        point_trans(pt8, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, pt8_trans);
+        point_trans(pt1, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, GLOBAL_OFFSET_Z_m_, pt1_trans);
+        point_trans(pt2, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, GLOBAL_OFFSET_Z_m_, pt2_trans);
+        point_trans(pt3, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, GLOBAL_OFFSET_Z_m_, pt3_trans);
+        point_trans(pt4, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, GLOBAL_OFFSET_Z_m_, pt4_trans);
+        point_trans(pt5, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, GLOBAL_OFFSET_Z_m_, pt5_trans);
+        point_trans(pt6, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, GLOBAL_OFFSET_Z_m_, pt6_trans);
+        point_trans(pt7, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, GLOBAL_OFFSET_Z_m_, pt7_trans);
+        point_trans(pt8, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, GLOBAL_OFFSET_Z_m_, pt8_trans);
         out_utm_bbox_[0] = min4(pt1_trans(0), pt4_trans(0), pt5_trans(0), pt8_trans(0));
         out_utm_bbox_[1] = max4(pt2_trans(0), pt3_trans(0), pt6_trans(0), pt7_trans(0));
         out_utm_bbox_[2] = min4(pt3_trans(1), pt4_trans(1), pt7_trans(1), pt8_trans(1));
@@ -787,27 +808,58 @@ public:
         std::string out_tfw_path = out_path_;
         strutil::replace_last(out_tfw_path, ".tif", ".tfw");
         export_tfw(out_tfw_path, transform_out);
+        //create empty output ortho
+        if (trans_ortho_) {
+            ortho_out_dataset_ = pdriver_->Create(ortho_out_path.c_str(), out_width_, out_height_, 3, GDT_Byte, NULL);
+            ortho_out_dataset_->SetGeoTransform(transform_out);
+            for (int band_id = 1; band_id < 4; ++band_id) {
+                ortho_out_band_ = ortho_out_dataset_->GetRasterBand(band_id);
+                num_tile_x = ceil((double)out_width_ / (double)tile_size);
+                num_tile_y = ceil((double)out_height_ / (double)tile_size);
+                for (int row = 0; row < num_tile_y; ++row) {
+                    for (int col = 0; col < num_tile_x; ++col) {
+                        fill_x = (tile_size * (col + 1) <= out_width_) ? tile_size * (col + 1) : out_width_;
+                        fill_x -= tile_size * col;
+                        fill_y = (tile_size * (row + 1) <= out_height_) ? tile_size * (row + 1) : out_height_;
+                        fill_y -= tile_size * row;
+                        rasterio_write_nan(ortho_out_band_, tile_size * col, tile_size * row, fill_x, fill_y);
+                    }
+                }
+            }
+
+            std::string out_tfw_path = ortho_out_path;
+            strutil::replace_last(out_tfw_path, ".tif", ".tfw");
+            export_tfw(out_tfw_path, transform_out);
+
+        }
         //GDALClose(out_dataset_);
     };
     std::string in_path_, out_path_;
     GDALDriver* pdriver_;
     GDALDataset* out_dataset_;
     GDALDataset* in_dataset_;
+    GDALDataset* ortho_out_dataset_;
+    GDALDataset* ortho_in_dataset_;
     GDALRasterBand* in_band_;
     GDALRasterBand* out_band_;
+    GDALRasterBand* ortho_in_band_;
+    GDALRasterBand* ortho_out_band_;
     GDALDataType in_datatype_;
     int out_width_, out_height_, in_width_, in_height_;
     double GLOBAL_OFFSET_X_m_;
     double GLOBAL_OFFSET_Y_m_;
+    double GLOBAL_OFFSET_Z_m_;
     double resolution_;
     double out_utm_bbox_[4];
     double in_utm_bbox_[4];
     double in_zmin_, in_zmax_;
+    bool trans_ortho_ = true;
     Eigen::Matrix4d transform_;
 
     void START() {
         double* write_value = new double[1];
         double* read_value = new double[1];
+        unsigned char* rgb = new unsigned char[3];
         //double pt[3],pt_out[3];
         Eigen::Vector3d pt, pt_out;
         int col_out, row_out;
@@ -818,11 +870,19 @@ public:
                 pt[1] = in_utm_bbox_[3] - resolution_ * row;
                 in_band_->RasterIO(GF_Read, col, row, 1, 1,
                     read_value, 1, 1, GDT_Float64, 0, 0);
+                if (trans_ortho_) {
+                    ortho_in_band_ = ortho_in_dataset_->GetRasterBand(1);
+                    ortho_in_band_->RasterIO(GF_Read, col, row, 1, 1,&rgb[0], 1, 1, GDT_Byte, 0, 0);
+                    ortho_in_band_ = ortho_in_dataset_->GetRasterBand(2);
+                    ortho_in_band_->RasterIO(GF_Read, col, row, 1, 1, &rgb[1], 1, 1, GDT_Byte, 0, 0);
+                    ortho_in_band_ = ortho_in_dataset_->GetRasterBand(3);
+                    ortho_in_band_->RasterIO(GF_Read, col, row, 1, 1, &rgb[2], 1, 1, GDT_Byte, 0, 0);
+                }
                 pt[2] = read_value[0];
                 if (isnan(pt[2])) {
                     continue;
                 }
-                point_trans(pt, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, pt_out);
+                point_trans(pt, transform_, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, GLOBAL_OFFSET_Z_m_, pt_out);
                 col_out = floor((pt_out[0] - out_utm_bbox_[0] + resolution_ / 2) / resolution_);
                 row_out= floor((out_utm_bbox_[3]- pt_out[1]+ resolution_ / 2) / resolution_);
                 if (row_out < 0) {
@@ -834,11 +894,23 @@ public:
                 if (pt_out[2] > read_value[0] || isnan(read_value[0])) {
                     out_band_->RasterIO(GF_Write, col_out, row_out, 1, 1,
                         &pt_out[2], 1, 1, GDT_Float64, 0, 0);
+                    if (trans_ortho_) {
+                        ortho_out_band_ = ortho_out_dataset_->GetRasterBand(1);
+                        ortho_out_band_->RasterIO(GF_Write, col_out, row_out, 1, 1, &rgb[0], 1, 1, GDT_Byte, 0, 0);
+                        ortho_out_band_ = ortho_out_dataset_->GetRasterBand(2);
+                        ortho_out_band_->RasterIO(GF_Write, col_out, row_out, 1, 1, &rgb[1], 1, 1, GDT_Byte, 0, 0);
+                        ortho_out_band_ = ortho_out_dataset_->GetRasterBand(3);
+                        ortho_out_band_->RasterIO(GF_Write, col_out, row_out, 1, 1, &rgb[2], 1, 1, GDT_Byte, 0, 0);
+                    }
                 }
             }
         }
         GDALClose(in_dataset_);
         GDALClose(out_dataset_);
+        if (trans_ortho_) {
+            GDALClose(ortho_in_dataset_);
+            GDALClose(ortho_out_dataset_);
+        }
     }
     double min4(double a, double b, double c, double d) {
         double tmp;
@@ -868,6 +940,17 @@ public:
         int bits = GDALGetDataTypeSize(dt_in);
         //cout << "rasterio_write_nan: " << bits << endl;
         switch (bits) {
+        case 8: {
+            //GInt16* buf16 = new GInt16[cnt];
+            unsigned char* buf8 = (unsigned char*)CPLMalloc(sizeof(unsigned char) * cnt);
+            for (int i = 0; i < cnt; ++i) {
+                buf8[i] = std::numeric_limits<unsigned char>::quiet_NaN();
+            }
+            band->RasterIO(GF_Write, offsetx, offsety, xsize, ysize, buf8, xsize, ysize, GDT_Byte, 0, 0);
+            //delete[] buf16;
+            CPLFree(buf8);
+            break;
+        }
         case 16: {
             //GInt16* buf16 = new GInt16[cnt];
             GInt16* buf16 = (GInt16*)CPLMalloc(sizeof(GInt16) * cnt);
@@ -915,30 +998,34 @@ public:
         out.close();
 
     }
-    void point_trans(Eigen::Vector3d& in_pt, Eigen::Matrix4d T, double offx, double offy, Eigen::Vector3d& out_pt) {
+    void point_trans(Eigen::Vector3d& in_pt, Eigen::Matrix4d T, double offx, double offy, double offz, Eigen::Vector3d& out_pt) {
         in_pt(0) -= offx;
         in_pt(1) -= offy;
+        in_pt(2) -= offz;
         Eigen::Vector4d in_pt_homo(in_pt(0),in_pt(1),in_pt(2),1);
         Eigen::Vector4d out_pt_homo = T * in_pt_homo;
         out_pt(0) = out_pt_homo(0)  + offx;
         out_pt(1) = out_pt_homo(1)  + offy;
-        out_pt(2) = out_pt_homo(2);
+        out_pt(2) = out_pt_homo(2) + offz;
         in_pt(0) += offx;
         in_pt(1) += offy;
+        in_pt(2) += offz;
     }
 };
 
 
 int main(int argc, char* argv[]) {
     argparse::ArgumentParser program("Apply transform to DSM, transformed result will be in the same folder of input file, ");
-    program.add_argument("-i").required().help("input DSM file, should come with tfw file");
+    program.add_argument("-dsm").required().help("input DSM file, should come with tfw file");
+    program.add_argument("-ortho").default_value("").help(" (optional) input orthophoto file, should be in the same gsd,height,width as dsm file, and come with tfw file");
+    program.add_argument("-outdir").default_value("").help(" (optional) outdir where transformed dsm stored");
     program.add_argument("-rotation").required().help("rotation parameters 9 elements, r11,r12,r13,r21,r22,r23,r31,r32,r33").nargs(9).scan<'g',double>();
     program.add_argument("-translation").required().help("translation parameters 3 elements, t1,t2,t3").nargs(3).scan<'g', double>();
 
     program.add_argument("-reso").default_value(0.5).help("DSM resolution").scan<'g', double>();
-    program.add_argument("-rot_center_x").default_value(0.0).help("rotation center in x direction, 0 represents lefttop corner of DSM").scan<'g', double>();
-    program.add_argument("-rot_center_y").default_value(0.0).help("rotation center in y direction, 0 represents lefttop corner of DSM").scan<'g', double>();
-
+    program.add_argument("-rot_center_x").default_value(0.0).help("Note: in local coordinate system, rotation center in x direction, 0 represents lefttop corner of DSM").scan<'g', double>();
+    program.add_argument("-rot_center_y").default_value(0.0).help("Note: in local coordinate system, rotation center in y direction, 0 represents lefttop corner of DSM").scan<'g', double>();
+    program.add_argument("-rot_center_z").default_value(0.0).help("Note: in local coordinate system, rotation center in z direction, 0 represents lefttop corner of DSM").scan<'g', double>();
 
     try {
         program.parse_args(argc, argv);    // Example: ./main --color orange
@@ -949,10 +1036,14 @@ int main(int argc, char* argv[]) {
         std::exit(1);
     }
 
-    std::string input_file= program.get<std::string>("-i");
+    std::string input_file= program.get<std::string>("-dsm");
+    std::string ortho_file = program.get<std::string>("-ortho");
+    std::string outdir = program.get<std::string>("-outdir");
+
     double reso = program.get<double>("-reso");
     double r_offx = program.get<double>("-rot_center_x");
     double r_offy = program.get<double>("-rot_center_y");
+    double r_offz = program.get<double>("-rot_center_z");
     std::vector<double> r = program.get<std::vector<double>>("-rotation");
     std::vector<double> t = program.get<std::vector<double>>("-translation");
     Eigen::Matrix4d T;
@@ -962,9 +1053,31 @@ int main(int argc, char* argv[]) {
         0, 0, 0, 1;
 
     std::string dsm_out = input_file;
-    dsm_out= dsm_out.replace(dsm_out.find(".tif"), sizeof(".tif") - 1, "_transformed.tif");
+    if (outdir == "") {
+        dsm_out = dsm_out.replace(dsm_out.find(".tif"), sizeof(".tif") - 1, "_transformed.tif");
+    }
+    else {
+        std::string dsm_out_name = fs::path(input_file).filename().string();
+        dsm_out_name= dsm_out_name.replace(dsm_out_name.find(".tif"), sizeof(".tif") - 1, "_transformed.tif");
+        dsm_out = (fs::path(outdir)/dsm_out_name).string();
+    }
 
-    DSM_TRANSFORM dsm_trans(input_file,dsm_out, T, r_offx, r_offy);
+
+    std::string ortho_out = ortho_file;
+    if (ortho_out != "") {
+        if (outdir == "") {
+            ortho_out = ortho_out.replace(ortho_out.find(".tif"), sizeof(".tif") - 1, "_transformed.tif");
+        }
+        else {
+            std::string ortho_out_name = fs::path(ortho_file).filename().string();
+            ortho_out_name = ortho_out_name.replace(ortho_out_name.find(".tif"), sizeof(".tif") - 1, "_transformed.tif");
+            ortho_out = fs::path(outdir).replace_filename(ortho_out_name).string();
+        }
+        
+    }
+
+
+    DSM_TRANSFORM dsm_trans(input_file,dsm_out,ortho_file,ortho_out, T, r_offx, r_offy, r_offz);
     dsm_trans.START();
 	
 }

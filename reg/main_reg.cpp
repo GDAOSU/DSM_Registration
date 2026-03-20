@@ -116,11 +116,12 @@ public:
 
 struct Parameters {
     std::string type_ = "rigid";
-    std::string ref_path_, src_path_;
+    std::string ref_path_, src_path_, out_dir_;
     double valid_ratio_threshold_ = 0.5;
     double var_min_=4.0;
     int verbose_=1;
     // for General 
+    double outlier_thresh_ = -1;
     double src_resolution_x_ = 0.5;
     double src_resolution_y_ = 0.5;
     double ref_resolution_x_ = 0.5;
@@ -136,6 +137,7 @@ struct Parameters {
     int rough_step_min_resolution_=3; //local_minimal_within_range=rough_step_min_resolution_*rough_step_m_
     int rough_num_mins_=3; // number of local minimal
     double fine_step_m_=0.5;
+    int gen_data_ = 0;
 
     // for rough align
     double icp_num_pts_ratio_ = 0.01;
@@ -197,15 +199,16 @@ void export_tfw(string path, double* transform) {
 
 }
 
-void get_aoi_bbox_pixels(double* aoi_utm_bbox, double* ref_bbox, double* src_bbox, int ref_width, int ref_height, int src_width, int src_height, int* aoi_ref_bbox, int* aoi_src_bbox) {
-    aoi_ref_bbox[0] = floor((aoi_utm_bbox[0] - ref_bbox[0]+0.25) / 0.5);
-    aoi_ref_bbox[1] = floor((aoi_utm_bbox[1] - ref_bbox[0]+0.25) / 0.5);
-    aoi_ref_bbox[2] = floor((ref_bbox[3]-aoi_utm_bbox[2]+ 0.25) / 0.5);
-    aoi_ref_bbox[3] = floor((ref_bbox[3]-aoi_utm_bbox[3]+0.25) / 0.5);
-    aoi_src_bbox[0] = floor((aoi_utm_bbox[0] - src_bbox[0]+0.25) / 0.5);
-    aoi_src_bbox[1] = floor((aoi_utm_bbox[1] - src_bbox[0]+0.25) / 0.5);
-    aoi_src_bbox[2] = floor((src_bbox[3]-aoi_utm_bbox[2]+0.25) / 0.5);
-    aoi_src_bbox[3] = floor((src_bbox[3]-aoi_utm_bbox[3]+0.25) / 0.5);
+void get_aoi_bbox_pixels(double* aoi_utm_bbox, double* ref_bbox, double* src_bbox, int ref_width, int ref_height, int src_width, int src_height,double ref_reso,double src_reso,
+    int* aoi_ref_bbox, int* aoi_src_bbox) {
+    aoi_ref_bbox[0] = floor((aoi_utm_bbox[0] - ref_bbox[0]+ref_reso/2) / ref_reso);
+    aoi_ref_bbox[1] = floor((aoi_utm_bbox[1] - ref_bbox[0]+ ref_reso/2) / ref_reso);
+    aoi_ref_bbox[2] = floor((ref_bbox[3]-aoi_utm_bbox[2]+ ref_reso/2) / ref_reso);
+    aoi_ref_bbox[3] = floor((ref_bbox[3]-aoi_utm_bbox[3]+ ref_reso/2) / ref_reso);
+    aoi_src_bbox[0] = floor((aoi_utm_bbox[0] - src_bbox[0]+ src_reso/2) /src_reso);
+    aoi_src_bbox[1] = floor((aoi_utm_bbox[1] - src_bbox[0]+ src_reso/2) / src_reso);
+    aoi_src_bbox[2] = floor((src_bbox[3]-aoi_utm_bbox[2]+ src_reso/2) / src_reso);
+    aoi_src_bbox[3] = floor((src_bbox[3]-aoi_utm_bbox[3]+ src_reso/2) / src_reso);
     aoi_ref_bbox[0] = max(aoi_ref_bbox[0], 0);
     aoi_ref_bbox[0] = min(aoi_ref_bbox[0], ref_width - 1);
     aoi_ref_bbox[1] = max(aoi_ref_bbox[1], 0);
@@ -741,6 +744,7 @@ public:
         ref_utm_bbox_[1] = 0.0 + (xSize + 1) * ref_transform[1];
         ref_utm_bbox_[2] = 0.0 + (ySize - 1) * ref_transform[5];
         ref_utm_bbox_[3] = 0.0;
+        ref_reso_ = ref_transform[1];
         GLOBAL_OFFSET_X_m_ = ref_transform[0];
         GLOBAL_OFFSET_Y_m_ = ref_transform[3];
 
@@ -755,13 +759,14 @@ public:
         src_utm_bbox_[1] = src_transform[0]- GLOBAL_OFFSET_X_m_ + (xSize - 1) * src_transform[1];
         src_utm_bbox_[2] = src_transform[3]- GLOBAL_OFFSET_Y_m_ + (ySize - 1) * src_transform[5];
         src_utm_bbox_[3] = src_transform[3]- GLOBAL_OFFSET_Y_m_;
+        src_reso_ = src_transform[1];
 
         aoi_utm_bbox_[0] = max(ref_utm_bbox_[0], src_utm_bbox_[0]);
         aoi_utm_bbox_[1] = min(ref_utm_bbox_[1], src_utm_bbox_[1]);
         aoi_utm_bbox_[2] = max(ref_utm_bbox_[2], src_utm_bbox_[2]);
         aoi_utm_bbox_[3] = min(ref_utm_bbox_[3], src_utm_bbox_[3]);
 
-        get_aoi_bbox_pixels(aoi_utm_bbox_, ref_utm_bbox_, src_utm_bbox_, ref_width_, ref_height_, src_width_, src_height_, aoi_ref_bbox_pixel_, aoi_src_bbox_pixel_);
+        get_aoi_bbox_pixels(aoi_utm_bbox_, ref_utm_bbox_, src_utm_bbox_, ref_width_, ref_height_, src_width_, src_height_, ref_reso_,src_reso_, aoi_ref_bbox_pixel_, aoi_src_bbox_pixel_);
 
         num_tile_x_ = ceil((aoi_utm_bbox_[1] - aoi_utm_bbox_[0]) / par_.tilesize_m_);
         num_tile_y_ = ceil((aoi_utm_bbox_[3] - aoi_utm_bbox_[2]) / par_.tilesize_m_);
@@ -815,6 +820,7 @@ public:
     double ref_utm_bbox_[4];
     double src_utm_bbox_[4];
     double aoi_utm_bbox_[4];
+    double ref_reso_, src_reso_;
     int aoi_ref_bbox_pixel_[4];
     int aoi_src_bbox_pixel_[4];
     int num_tile_x_, num_tile_y_;
@@ -834,6 +840,7 @@ public:
     double fine_rotation_[9];
 
     Eigen::Matrix4d T_final_;
+    double final_rmse_;
 	double final_rot_[9];
 	double final_trans_[3];
 
@@ -952,7 +959,7 @@ public:
         }
         // reject outlier
         if (!multi_or_not) {
-            CORR_REJECTOR1(corrs, 1.0);
+            CORR_REJECTOR1(corrs);
         }
 
         //compute rmse
@@ -1002,7 +1009,7 @@ public:
                                         Eigen::MatrixXd& corr_dst, Eigen::VectorXd& corr_w,
                                         double& RMSE, bool plane_or_not) {
         RMSE = 0;
-        bool multi_or_not = false;
+        bool robust_reject = false;
         double utm_x, utm_y;
         int grid_x, grid_y;
         int search_xmin, search_xmax, search_ymax, search_ymin;
@@ -1010,6 +1017,9 @@ public:
         double* ref_search_pt = new double[1];
         double src_pts_num = src_pts.size();
         std::vector<CORR> corrs;
+        if (par_.outlier_thresh_ != -1) {
+            robust_reject = true;
+        }
         for (int i = 0; i < src_pts.size(); ++i) {
             double src_pt[3] = { src_pts[i].pos[0],src_pts[i].pos[1],src_pts[i].pos[2] };
             //find pixel location in ref_image coordinate
@@ -1019,7 +1029,7 @@ public:
             }
 
             ref_band_->RasterIO(GF_Read, grid_x, grid_y,1, 1, ref_search_pt, 1, 1, GDT_Float64, 0, 0);
-            if (isnan(ref_search_pt[0])) {
+            if (isnan(ref_search_pt[0]) || ref_search_pt[0]==-9999) {
                 continue;
             }
             int search_half_size_pixel_x = ceil(abs(src_pt[2] - ref_search_pt[0])/par_.ref_resolution_x_);
@@ -1055,36 +1065,58 @@ public:
                     ref_search_area, search_width, search_height, GDT_Float64, 0, 0);
 
                 //construct kd-tree
-                PointCloud<double> cloud;
+                //PointCloud<double> cloud;
+                double min_dis = 0;
+                int min_idx = 0;
+                double min_x = 0 ;
+                double min_y = 0;
+                double min_z = 0 ;
                 for (int row = 0; row < search_height; ++row) {
                     for (int col = 0; col < search_width; ++col) {
                         int idx = col + row * search_width;
-                        if (isnan(ref_search_area[idx])) {
+                        if (isnan(ref_search_area[idx]) || ref_search_area[idx]==-9999 ) {
                             continue;
                         }
                         double x = ref_utm_bbox_[0] + (search_xmin + col + 0.5) * par_.ref_resolution_x_;
                         double y = ref_utm_bbox_[3] - (search_ymin + row + 0.5) * par_.ref_resolution_y_;
                         double z = ref_search_area[idx];
-                        PointCloud<double>::Point p;
-                        p.x = x, p.y = y, p.z = z;
-                        cloud.pts.push_back(p);
+                        double dis = (x - src_pt[0]) * (x - src_pt[0]) + (y - src_pt[1]) * (y - src_pt[1]) + (z - src_pt[2]) * (z - src_pt[2]);
+                        if (idx == 0) {
+                            min_dis = dis;
+                            min_x = x;
+                            min_y = y;
+                            min_z = z;
+                        }
+                        else {
+                            if (dis < min_dis) {
+                                min_dis = dis;
+                                min_idx = idx;
+                                min_x = x;
+                                min_y = y;
+                                min_z = z;
+                            }
+                        }
+                        //PointCloud<double>::Point p;
+                        //p.x = x, p.y = y, p.z = z;
+                        //cloud.pts.push_back(p);
                     }
                 }
-                if (cloud.pts.size() == 0) {
-                    continue;
-                }
-                using my_kd_tree_t = nanoflann::KDTreeSingleIndexAdaptor<
-                    nanoflann::L2_Simple_Adaptor<double, PointCloud<double>>,
-                    PointCloud<double>, 3 /* dim */>;
-                my_kd_tree_t kd_index(3 /*dim*/, cloud, { 10 /* max leaf */ });
-                const size_t                   num_results = 1;
-                size_t                         ret_index;
-                double                          out_dist_sqr;
-                nanoflann::KNNResultSet<double> resultSet(num_results);
-                resultSet.init(&ret_index, &out_dist_sqr);
-                kd_index.findNeighbors(resultSet, &src_pt[0], nanoflann::SearchParams(10));
+                //if (cloud.pts.size() == 0) {
+                //    continue;
+                //}
+                //using my_kd_tree_t = nanoflann::KDTreeSingleIndexAdaptor<
+                //    nanoflann::L2_Simple_Adaptor<double, PointCloud<double>>,
+                //    PointCloud<double>, 3 /* dim */>;
+                //my_kd_tree_t kd_index(3 /*dim*/, cloud, { 10 /* max leaf */ });
+                //const size_t                   num_results = 1;
+                //size_t                         ret_index;
+                //double                          out_dist_sqr;
+                //nanoflann::KNNResultSet<double> resultSet(num_results);
+                //resultSet.init(&ret_index, &out_dist_sqr);
+                //kd_index.findNeighbors(resultSet, &src_pt[0], nanoflann::SearchParams(10));
 
-                gs::Point ref_pt(cloud.pts[ret_index].x, cloud.pts[ret_index].y, cloud.pts[ret_index].z);
+                //gs::Point ref_pt(cloud.pts[ret_index].x, cloud.pts[ret_index].y, cloud.pts[ret_index].z);
+                gs::Point ref_pt(min_x, min_y, min_z);
                 gs::Point src_pt_point(src_pt[0], src_pt[1], src_pt[2]);
                 CORR corr;
                 corr.ref = ref_pt;
@@ -1094,13 +1126,13 @@ public:
                 delete[] ref_search_area;
             }
         }
+        // robust reject outlier correspondences
+        if (par_.outlier_thresh_ != -1) {
+            CORR_REJECTOR1(corrs);
+        }
         //reweight the corr
         for (int i = 0; i < corrs.size(); ++i) {
             corrs[i].w /= double(corrs.size());
-        }
-        // reject outlier
-        if (!multi_or_not) {
-            CORR_REJECTOR1(corrs, 1.0);
         }
 
         //compute rmse
@@ -1117,17 +1149,16 @@ public:
         else {
             for (int i = 0; i < corrs.size(); ++i) {
                 CORR corr = corrs[i];
-                RMSE += corrs[i].w * (pow(corrs[i].src.pos[0] - corrs[i].ref.pos[0], 2.0) +
+                RMSE += (pow(corrs[i].src.pos[0] - corrs[i].ref.pos[0], 2.0) +
                     pow(corrs[i].src.pos[1] - corrs[i].ref.pos[1], 2.0) +
                     pow(corrs[i].src.pos[2] - corrs[i].ref.pos[2], 2.0));
-                if (isnan(RMSE)) {
-                    int a = 1;
-                }
+
             }
+            RMSE /= corrs.size();
             RMSE = sqrt(RMSE);
         }
         if (corrs.size() == 0) {
-            RMSE = 9999;
+            RMSE = -1;
         }
 
         //transform to eigen type
@@ -1210,8 +1241,7 @@ public:
         corrs.clear();
         corrs = corrs_tmp;
     }
-    void CORR_REJECTOR1(std::vector<CORR>& corrs,double trimmed_ratio) {
-        int num_trimmed = (int)corrs.size() * trimmed_ratio;
+    void CORR_REJECTOR1(std::vector<CORR>& corrs) {
         std::vector<CORR> corrs_tmp;
         std::vector<std::pair<float, int>> corr_dis_index;
         float dis;
@@ -1219,11 +1249,10 @@ public:
             dis = std::sqrt(pow(corrs[i].src.pos[0] - corrs[i].ref.pos[0], 2.0) +
                 pow(corrs[i].src.pos[1] - corrs[i].ref.pos[1], 2.0) +
                 pow(corrs[i].src.pos[2] - corrs[i].ref.pos[2], 2.0));
-            corr_dis_index.push_back(std::make_pair(dis, i));
-        }
-        std::sort(corr_dis_index.begin(), corr_dis_index.end(), cmp_ascend);
-        for (int i = 0; i < num_trimmed; ++i) {
-            corrs_tmp.push_back(corrs[corr_dis_index[i].second]);
+            if (dis > par_.outlier_thresh_) {
+                continue;
+            }
+            corrs_tmp.push_back(corrs[i]);
         }
         corrs.clear();
         corrs = corrs_tmp;
@@ -1281,8 +1310,7 @@ public:
         rough_translation_[2] = 0;
         T_final_ = Eigen::Matrix4d::Identity();
         ADAPTIVE_ICP(rough_src_pts_, T_final_, par_.type_, par_.search_half_size_pixel_, par_.rough_icp_max_iter_, par_.rough_icp_rmse_threshold_,
-            par_.plane_or_not_, rough_rmse, rough_icp_log);
-
+            par_.plane_or_not_, final_rmse_, rough_icp_log);
     }
 
     void STEP_END() {
@@ -1299,7 +1327,6 @@ public:
         Eigen::VectorXd W;
         double corr_rmse = 0;
         FIND_CORRESPONDENCE_ADAPTIVE(src_pts, X, Y, W, corr_rmse, plane_or_not);
-        //FIND_CORRESPONDENCE(src_pts, X, Y, W, init_search_half_pixels,corr_rmse, plane_or_not);
         final_rmse = corr_rmse;
         //Estmate Transformation
         ofstream ofs;
@@ -1307,7 +1334,7 @@ public:
             ofs.open(debug_path);
         }
         for (int iter = 0; iter < max_iter; ++iter) {
-            std::cout << std::setprecision(11) << "ICP #Iteration: " << iter << "# corrs: " << X.rows() << " RMSE: " << corr_rmse << "Trans: " << T(0, 3) << "," << T(1, 3) << "," << T(2, 3) << std::endl;
+            std::cout << std::setprecision(11) << "ICP #Iteration: " << iter << "# corrs: " << X.cols() << " RMSE: " << corr_rmse << "Trans: " << T(0, 3) << "," << T(1, 3) << "," << T(2, 3) << std::endl;
             if (debug_path != "" && par_.verbose_ > 0) {
                 ofs << std::setprecision(11) << corr_rmse << " " << T(0, 3) << " " << T(1, 3) << " " << T(2, 3) << std::endl;
             }
@@ -1325,7 +1352,6 @@ public:
             // FInd correspondence
             double pre_rmse = corr_rmse;
             FIND_CORRESPONDENCE_ADAPTIVE(src_pts, X, Y, W, corr_rmse, plane_or_not);
-            //FIND_CORRESPONDENCE(src_pts, X, Y, W, init_search_half_pixels, corr_rmse, plane_or_not);
 
             if (abs(pre_rmse - corr_rmse) < rmse_threshold) {
                 final_rmse = (corr_rmse < final_rmse) ? corr_rmse : final_rmse;
@@ -1338,6 +1364,7 @@ public:
         }
 
         //print
+        std::cout << "Final RMSE (< " << par_.outlier_thresh_ << "m): " << final_rmse << std::endl;
         std::cout << "ICP result rotation: \n" << T.block(0, 0, 3, 3) << "\n" <<
             "ICP result translation\n" << T.block(0, 3, 3, 1) << endl;
         std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
@@ -1629,21 +1656,53 @@ public:
 void DSM_REG_v1(Parameters& par) {
     DSM_REG dsm_reg(par);
     dsm_reg.START("");
-    std::string dsm_out_name = fs::path(par.src_path_).filename().string();
-    dsm_out_name = dsm_out_name.replace(dsm_out_name.find(".tif"), sizeof(".tif") - 1, "_reg.tif");
-    std::string dsm_out_path = fs::path(par.src_path_).replace_filename(dsm_out_name).string();
-    DSM_TRANSFORM dsm_trans(par.src_path_, dsm_out_path, dsm_reg.T_final_, dsm_reg.GLOBAL_OFFSET_X_m_, dsm_reg.GLOBAL_OFFSET_Y_m_);
-    dsm_trans.START();
+    //export transformation results
+    std::string src_name = fs::path(par.src_path_).filename().string();
+    std::string ref_name = fs::path(par.ref_path_).filename().string();
+    src_name = src_name.substr(0,src_name.find(".tif"));
+    ref_name = ref_name.substr(0,ref_name.find(".tif"));
+    std::string results_name = src_name + "_" + ref_name + "_reg.txt";
+    std::string results_path;
+    if (par.out_dir_ == "") {
+        results_path = fs::path(par.src_path_).replace_filename(results_name).string();
+    }
+    else {
+        results_path = (fs::path(par.out_dir_) / results_name).string();
+    }
+    
+    ofstream ofs;
+    ofs.open(results_path);
+    ofs << "### Final RMSE, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, T00, T01, T02, T03, T10, T11, T12, T13, T20, T21, T22, T23, T30, T31, T32, T33\n";
+    ofs  << dsm_reg.final_rmse_ << "\n";
+    ofs << std::setprecision(11) << dsm_reg.GLOBAL_OFFSET_X_m_ << "\n" << dsm_reg.GLOBAL_OFFSET_Y_m_ << "\n";
+    ofs << std::setprecision(11) << dsm_reg.T_final_(0,0) << "\n" << dsm_reg.T_final_(0, 1) << "\n" << dsm_reg.T_final_(0, 2) << "\n" << dsm_reg.T_final_(0, 3) << "\n";
+    ofs << std::setprecision(11) << dsm_reg.T_final_(1, 0) << "\n" << dsm_reg.T_final_(1, 1) << "\n" << dsm_reg.T_final_(1, 2) << "\n" << dsm_reg.T_final_(1, 3) << "\n";
+    ofs << std::setprecision(11) << dsm_reg.T_final_(2, 0) << "\n" << dsm_reg.T_final_(2, 1) << "\n" << dsm_reg.T_final_(2, 2) << "\n" << dsm_reg.T_final_(2, 3) << "\n";
+    ofs << std::setprecision(11) << dsm_reg.T_final_(3, 0) << "\n" << dsm_reg.T_final_(3, 1) << "\n" << dsm_reg.T_final_(3, 2) << "\n" << dsm_reg.T_final_(3, 3) << "\n";
+    ofs.close();
+
+    if (par.gen_data_) {
+        //perform transform source dsm to reference
+        std::string dsm_out_name = fs::path(par.src_path_).filename().string();
+        dsm_out_name = dsm_out_name.replace(dsm_out_name.find(".tif"), sizeof(".tif") - 1, "_reg.tif");
+        std::string dsm_out_path = fs::path(par.src_path_).replace_filename(dsm_out_name).string();
+        DSM_TRANSFORM dsm_trans(par.src_path_, dsm_out_path, dsm_reg.T_final_, dsm_reg.GLOBAL_OFFSET_X_m_, dsm_reg.GLOBAL_OFFSET_Y_m_);
+        dsm_trans.START();
+    }
+
 }
 
 int main(int argc, char* argv[]) {
     argparse::ArgumentParser program("Large-scale DSM registration based on ICP, registered result will be in the same folder of src file");
     program.add_argument("-src").required().help("source/moving DSM file");
     program.add_argument("-dst").required().help("reference/fixed DSM file");
+    program.add_argument("-outdir").default_value("").help("outdir where registration results stored");
+    program.add_argument("-outlier_thresh").default_value(-1.0).help("outlier threshold for correspondences").scan<'g', double>();
     program.add_argument("-icp_num_pts").default_value(0.001).help("[default: 0.001] #pts used for ICP").scan<'g', double>();
     program.add_argument("-icp_max_iter").default_value(100).help("[default: 100] Rough registration using ICP: maximum number of iterations").scan<'d',int>();
     program.add_argument("-icp_rmse_threshold").default_value(1e-5).help("[default: 1e-5] RMSR threshold for early stop").scan<'g', double>();
     program.add_argument("-type").default_value("rigid").help("transformation type, can be (rigid, translation), 'rigid' contains 3DoF for rotation, 3FoF for translation, 'translation' only contains 3DoF ");
+    program.add_argument("-gen_data").default_value(0).help("0: not transform, 1: transform source data").scan<'d', int>();
 
     try {
         program.parse_args(argc, argv);    // Example: ./main --color orange
@@ -1656,19 +1715,25 @@ int main(int argc, char* argv[]) {
 
     std::string src_file= program.get<std::string>("-src");
     std::string dst_file = program.get<std::string>("-dst");
+    std::string out_dir = program.get<std::string>("-outdir");
     int icp_max_iter = program.get<int>("-icp_max_iter");
+    int gen_data = program.get<int>("-gen_data");
     double icp_num_pts_ratio = program.get<double>("-icp_num_pts");
     double icp_rmse_threshold= program.get<double>("-icp_rmse_threshold");
+    double outlier_thresh = program.get<double>("-outlier_thresh");
     std::string type = program.get<std::string>("-type");
     Parameters par;
     par.src_path_ = src_file;
     par.ref_path_ = dst_file;
+    par.out_dir_ = out_dir;
     par.icp_num_pts_ratio_ = icp_num_pts_ratio;
     par.rough_icp_max_iter_ = icp_max_iter;
     par.rough_icp_rmse_threshold_ = icp_rmse_threshold;
     par.fine_icp_max_iter_ = icp_max_iter;
     par.fine_icp_rmse_threshold_ = icp_rmse_threshold;
     par.type_ = type;
+    par.outlier_thresh_ = outlier_thresh;
+    par.gen_data_ = gen_data;
 
     DSM_REG_v1(par);
 }
