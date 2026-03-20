@@ -943,7 +943,7 @@ public:
             double                          out_dist_sqr;
             nanoflann::KNNResultSet<double> resultSet(num_results);
             resultSet.init(&ret_index, &out_dist_sqr);
-            kd_index.findNeighbors(resultSet, &src_pt[0],nanoflann::SearchParams(10));
+            kd_index.findNeighbors(resultSet, &src_pt[0],nanoflann::SearchParameters(10));
 
             gs::Point ref_pt(cloud.pts[ret_index].x, cloud.pts[ret_index].y, cloud.pts[ret_index].z);
             gs::Point src_pt_point(src_pt[0], src_pt[1], src_pt[2]);
@@ -1656,11 +1656,11 @@ public:
 void DSM_REG_v1(Parameters& par) {
     DSM_REG dsm_reg(par);
     dsm_reg.START("");
-    //export transformation results
-    std::string src_name = fs::path(par.src_path_).filename().string();
-    std::string ref_name = fs::path(par.ref_path_).filename().string();
-    src_name = src_name.substr(0,src_name.find(".tif"));
-    ref_name = ref_name.substr(0,ref_name.find(".tif"));
+
+    // export transformation results
+    std::string src_name = fs::path(par.src_path_).stem().string();
+    std::string ref_name = fs::path(par.ref_path_).stem().string();
+
     std::string results_name = src_name + "_" + ref_name + "_reg.txt";
     std::string results_path;
     if (par.out_dir_ == "") {
@@ -1669,27 +1669,25 @@ void DSM_REG_v1(Parameters& par) {
     else {
         results_path = (fs::path(par.out_dir_) / results_name).string();
     }
-    
+
     ofstream ofs;
     ofs.open(results_path);
     ofs << "### Final RMSE, GLOBAL_OFFSET_X_m_, GLOBAL_OFFSET_Y_m_, T00, T01, T02, T03, T10, T11, T12, T13, T20, T21, T22, T23, T30, T31, T32, T33\n";
-    ofs  << dsm_reg.final_rmse_ << "\n";
+    ofs << dsm_reg.final_rmse_ << "\n";
     ofs << std::setprecision(11) << dsm_reg.GLOBAL_OFFSET_X_m_ << "\n" << dsm_reg.GLOBAL_OFFSET_Y_m_ << "\n";
-    ofs << std::setprecision(11) << dsm_reg.T_final_(0,0) << "\n" << dsm_reg.T_final_(0, 1) << "\n" << dsm_reg.T_final_(0, 2) << "\n" << dsm_reg.T_final_(0, 3) << "\n";
+    ofs << std::setprecision(11) << dsm_reg.T_final_(0, 0) << "\n" << dsm_reg.T_final_(0, 1) << "\n" << dsm_reg.T_final_(0, 2) << "\n" << dsm_reg.T_final_(0, 3) << "\n";
     ofs << std::setprecision(11) << dsm_reg.T_final_(1, 0) << "\n" << dsm_reg.T_final_(1, 1) << "\n" << dsm_reg.T_final_(1, 2) << "\n" << dsm_reg.T_final_(1, 3) << "\n";
     ofs << std::setprecision(11) << dsm_reg.T_final_(2, 0) << "\n" << dsm_reg.T_final_(2, 1) << "\n" << dsm_reg.T_final_(2, 2) << "\n" << dsm_reg.T_final_(2, 3) << "\n";
     ofs << std::setprecision(11) << dsm_reg.T_final_(3, 0) << "\n" << dsm_reg.T_final_(3, 1) << "\n" << dsm_reg.T_final_(3, 2) << "\n" << dsm_reg.T_final_(3, 3) << "\n";
     ofs.close();
 
     if (par.gen_data_) {
-        //perform transform source dsm to reference
-        std::string dsm_out_name = fs::path(par.src_path_).filename().string();
-        dsm_out_name = dsm_out_name.replace(dsm_out_name.find(".tif"), sizeof(".tif") - 1, "_reg.tif");
+        // perform transform source dsm to reference
+        std::string dsm_out_name = fs::path(par.src_path_).stem().string() + "_reg.tif";
         std::string dsm_out_path = fs::path(par.src_path_).replace_filename(dsm_out_name).string();
         DSM_TRANSFORM dsm_trans(par.src_path_, dsm_out_path, dsm_reg.T_final_, dsm_reg.GLOBAL_OFFSET_X_m_, dsm_reg.GLOBAL_OFFSET_Y_m_);
         dsm_trans.START();
     }
-
 }
 
 int main(int argc, char* argv[]) {
