@@ -17,11 +17,49 @@ Support rigid transformation (6DoF) and translation (3DoF).
 
 # Requirement & Build
 
-Tested on Windows 11 with Visual Studio 2019, c++17, Eigen3 3.4.0, GDAL 3.8.4, and nanoflann 1.5.1.
+This project was tested on Windows 11 with Visual Studio 2019, c++17, and vcpkg.
 
-1. Open the project folder in CMake GUI.
-2. Select Visual Studio 16 2019, x64, and the vcpkg toolchain file.
-3. Click Configure and then Generate.
-4. Open the generated `.sln` file in Visual Studio and build it in Release mode.
+vcpkg environment:
 
-The main executable for DSM registration will be generated as `reg.exe`.
+```text
+vcpkg tool version: 2026-04-08-e0612b42ce44e55a0e630f2ee9d3c533a63d8bc1
+vcpkg commit: 2b65c20fc66eda893aa15a15a453c3cf09500b19
+vcpkg triplet: x64-windows
+````
+
+dependency versions:
+```text
+Eigen3: 5.0.1
+GDAL: 3.12.4#1
+nanoflann: 1.9.0
+```
+
+Build steps:
+1. Install Visual Studio 2019 with c++ development tools.
+2. Install and bootstrap vcpkg.
+3. Install the required packages with vcpkg:
+```bat
+vcpkg install eigen3:x64-windows gdal:x64-windows nanoflann:x64-windows
+```
+4. Open the project folder in CMake GUI.
+5. Select the generator:
+```text
+Visual Studio 16 2019
+```
+6. Select the platform:
+
+```text
+x64
+```
+7. Set the vcpkg toolchain file in CMake:
+```text
+CMAKE_TOOLCHAIN_FILE=path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
+```
+8. Click `Configure`, then click `Generate`.
+9. Open the generated `.sln` file in Visual Studio.
+10. Build the project in `Release` mode.
+The main executable for DSM registration will be generated as:
+
+```text
+reg.exe
+```

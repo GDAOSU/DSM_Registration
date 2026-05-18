@@ -381,7 +381,7 @@ void write_shp(std::vector<TILE_INFO> tile_infos, string out_path) {
         var_str.copy(cstr, var_str.length());
         cstr[var_str.length()] = '\0';
         //poFeature->SetField("Variance", cstr);
-        OGR_F_SetFieldString(poFeature, OGR_F_GetFieldIndex(poFeature, "Ref_Var"), cstr);
+        poFeature->SetField("Ref_Var", cstr);
         delete[] cstr;
 
         var_str = to_string(tile_infos[i].src_var);
@@ -389,14 +389,14 @@ void write_shp(std::vector<TILE_INFO> tile_infos, string out_path) {
         var_str.copy(cstr2, var_str.length());
         cstr2[var_str.length()] = '\0';
         //poFeature->SetField("Variance", cstr);
-        OGR_F_SetFieldString(poFeature, OGR_F_GetFieldIndex(poFeature, "Src_Var"), cstr2);
+        poFeature->SetField("Src_Var", cstr2);
         delete[] cstr2;
 
         char* cstr1 = new char[id_str.length() + 1];
         id_str.copy(cstr1, id_str.length());
         cstr1[id_str.length()] = '\0';
         //poFeature->SetField("Variance", cstr);
-        OGR_F_SetFieldString(poFeature, OGR_F_GetFieldIndex(poFeature, "Tile_ID"), cstr1);
+        poFeature->SetField("Tile_ID", cstr1);
         delete[] cstr1;
 
         var_str = to_string(tile_infos[i].ref_valid);
@@ -404,7 +404,7 @@ void write_shp(std::vector<TILE_INFO> tile_infos, string out_path) {
         var_str.copy(cstr3, var_str.length());
         cstr3[var_str.length()] = '\0';
         //poFeature->SetField("Variance", cstr);
-        OGR_F_SetFieldString(poFeature, OGR_F_GetFieldIndex(poFeature, "Ref_Valid"), cstr3);
+        poFeature->SetField("Ref_Valid", cstr3);
         delete[] cstr3;
 
         var_str = to_string(tile_infos[i].src_valid);
@@ -412,7 +412,7 @@ void write_shp(std::vector<TILE_INFO> tile_infos, string out_path) {
         var_str.copy(cstr4, var_str.length());
         cstr4[var_str.length()] = '\0';
         //poFeature->SetField("Variance", cstr);
-        OGR_F_SetFieldString(poFeature, OGR_F_GetFieldIndex(poFeature, "Src_Valid"), cstr4);
+        poFeature->SetField("Src_Valid", cstr4);
         delete[] cstr4;
 
         var_str = to_string(tile_infos[i].src_lambda1);
@@ -420,14 +420,14 @@ void write_shp(std::vector<TILE_INFO> tile_infos, string out_path) {
         var_str.copy(cstr5, var_str.length());
         cstr5[var_str.length()] = '\0';
         //poFeature->SetField("Variance", cstr);
-        OGR_F_SetFieldString(poFeature, OGR_F_GetFieldIndex(poFeature, "Src_Lmd1"), cstr5);
+        poFeature->SetField("Src_Lmd1", cstr5);
         delete[] cstr5;
 
         var_str = to_string(tile_infos[i].src_lambda2);
         char* cstr6 = new char[var_str.length() + 1];
         var_str.copy(cstr6, var_str.length());
         cstr6[var_str.length()] = '\0';
-        OGR_F_SetFieldString(poFeature, OGR_F_GetFieldIndex(poFeature, "Src_Lmd2"), cstr6);
+        poFeature->SetField("Src_Lmd2", cstr6);
         delete[] cstr6;
 
         var_str = to_string(tile_infos[i].src_R);
@@ -435,7 +435,7 @@ void write_shp(std::vector<TILE_INFO> tile_infos, string out_path) {
         var_str.copy(cstr7, var_str.length());
         cstr7[var_str.length()] = '\0';
         //poFeature->SetField("Variance", cstr);
-        OGR_F_SetFieldString(poFeature, OGR_F_GetFieldIndex(poFeature, "Src_R"), cstr7);
+        poFeature->SetField("Src_R", cstr7);
         delete[] cstr7;
 
         var_str = to_string(tile_infos[i].ref_lambda1);
@@ -443,14 +443,14 @@ void write_shp(std::vector<TILE_INFO> tile_infos, string out_path) {
         var_str.copy(cstr8, var_str.length());
         cstr8[var_str.length()] = '\0';
         //poFeature->SetField("Variance", cstr);
-        OGR_F_SetFieldString(poFeature, OGR_F_GetFieldIndex(poFeature, "Ref_Lmd1"), cstr8);
+        poFeature->SetField("Ref_Lmd1", cstr8);
         delete[] cstr8;
 
         var_str = to_string(tile_infos[i].ref_lambda2);
         char* cstr9 = new char[var_str.length() + 1];
         var_str.copy(cstr9, var_str.length());
         cstr9[var_str.length()] = '\0';
-        OGR_F_SetFieldString(poFeature, OGR_F_GetFieldIndex(poFeature, "Ref_Lmd2"), cstr9);
+        poFeature->SetField("Ref_Lmd2", cstr9);
         delete[] cstr9;
 
         var_str = to_string(tile_infos[i].ref_R);
@@ -458,7 +458,7 @@ void write_shp(std::vector<TILE_INFO> tile_infos, string out_path) {
         var_str.copy(cstr10, var_str.length());
         cstr10[var_str.length()] = '\0';
         //poFeature->SetField("Variance", cstr);
-        OGR_F_SetFieldString(poFeature, OGR_F_GetFieldIndex(poFeature, "Ref_R"), cstr10);
+        poFeature->SetField("Ref_R", cstr10);
         delete[] cstr10;
 
         OGRGeometryH geo = OGR_G_CreateGeometry(wkbLinearRing);
@@ -468,7 +468,7 @@ void write_shp(std::vector<TILE_INFO> tile_infos, string out_path) {
         OGR_G_SetPoint_2D(geo, 3, tile_infos[i].utm_bbox[1], tile_infos[i].utm_bbox[2]);
         OGR_G_CloseRings(geo);
         geo = OGR_G_ForceToPolygon(geo);
-        OGR_F_SetGeometry(poFeature, geo);
+        poFeature->SetGeometry(OGRGeometry::FromHandle(geo));
         OGR_G_DestroyGeometry(geo);
         if (poLayer->CreateFeature(poFeature) != OGRERR_NONE)
         {
